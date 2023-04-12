@@ -1,0 +1,1 @@
+if error on WSAStartup@2 or something, add -lwsa_32 in linker settings, or while starting the server, use command gcc prog.c -o prog -lws2_32.
