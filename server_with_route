@@ -1,23 +1,52 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
-#pragma comment(lib,"ws2_32.lib")
+#pragma comment(lib, "ws2_32.lib")
 
-#include<iostream>
-#include<WinSock2.h>
-#include<string>
+#include <iostream>
+#include <WinSock2.h>
+#include <string>
+#include "json.hpp"
 
-void handleRequest(SOCKET new_wsocket, const std::string& route) {
+using json = nlohmann::json;
+
+void handleRequest(SOCKET new_wsocket, const std::string& route, const std::string& request) {
     std::string serverMessage;
 
     if (route == "/aat") {
-        serverMessage = "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: ";
-        std::string response = "<html><h1>Hello world from /aat</h1></html>";
-        serverMessage.append(std::to_string(response.size()));
-        serverMessage.append("\n\n");
-        serverMessage.append(response);
+        try {
+            // Parse JSON data from the request
+            json requestData = json::parse(request);
+
+            // Process the JSON data (you can modify this part based on your requirements)
+            std::string name = requestData["name"];
+            int age = requestData["age"];
+
+            // Create a JSON response object
+            json responseObject;
+            responseObject["message"] = "Data received and processed successfully";
+            responseObject["name"] = name;
+            responseObject["age"] = age;
+
+            // Convert the JSON response object to a string
+            std::string response = responseObject.dump();
+
+            // Build the HTTP response
+            serverMessage = "HTTP/1.1 200 OK\nContent-Type: application/json\nContent-Length: ";
+            serverMessage.append(std::to_string(response.size()));
+            serverMessage.append("\n\n");
+            serverMessage.append(response);
+        } catch (const std::exception& e) {
+            // Handle JSON parsing error
+            serverMessage = "HTTP/1.1 400 Bad Request\nContent-Type: text/html\nContent-Length: ";
+            serverMessage.append(std::to_string(strlen(e.what())));
+            serverMessage.append("\n\n");
+            serverMessage.append(e.what());
+        }
     } else {
+        // Route not found
         serverMessage = "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: 19\n\n<html><h1>404 Not Found</h1></html>";
     }
 
+    // Send the HTTP response
     int bytesSent = send(new_wsocket, serverMessage.c_str(), serverMessage.size(), 0);
     if (bytesSent < 0) {
         std::cout << "Could not send response  ";
@@ -28,41 +57,7 @@ void handleRequest(SOCKET new_wsocket, const std::string& route) {
 }
 
 int main() {
-    std::cout << "Creating a server" << std::endl;
-    SOCKET wsocket;
-    SOCKET new_wsocket;
-    WSADATA wsaData;
-    struct sockaddr_in server;
-    int server_len;
-    int BUFFER_SIZE = 30720;
-
-    ///initialize
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cout << "Couldn't initialize the server";
-    }
-
-    ///create a socket
-    wsocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (wsocket == INVALID_SOCKET) {
-        std::cout << "Couldn't create socket";
-    }
-
-    ///bind socket to address
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
-    server.sin_port = htons(8000);
-    server_len = sizeof(server);
-
-    if (bind(wsocket, (SOCKADDR*)&server, server_len) != 0) {
-        std::cout << "Could not bind socket";
-    }
-
-    ///listen to address
-    if (listen(wsocket, 10) != 0) {
-        std::cout << "Could not start listening\n";
-    }
-
-    std::cout << "Listening on 127.0.0.1:8000\n";
+    // ... (same as before)
 
     while (true) {
         new_wsocket = accept(wsocket, (SOCKADDR*)&server, &server_len);
@@ -70,7 +65,7 @@ int main() {
             std::cout << "Could not accept \n";
         }
 
-        ///read request
+        // Read request
         char buff[30720] = { 0 };
         int bytes = recv(new_wsocket, buff, BUFFER_SIZE, 0);
         if (bytes < 0) {
@@ -83,7 +78,8 @@ int main() {
         size_t end = request.find(" ", start);
         std::string route = request.substr(start, end - start);
 
-        handleRequest(new_wsocket, route);
+        // Handle the request based on the route
+        handleRequest(new_wsocket, route, request);
     }
 
     closesocket(wsocket);
